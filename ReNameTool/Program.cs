@@ -7,47 +7,23 @@ namespace ReNameTool
     {
         static readonly string ExeInDirectory = AppDomain.CurrentDomain.BaseDirectory;
         static readonly string ResultPath = Path.Combine(ExeInDirectory, "Result");
-        static readonly string RecordedPath = Path.Combine(ResultPath, "ReNameRecordedData");
-        static readonly List<string> Extensions = new List<string>() { "JPG", "PNG" };
-        private static Dictionary<string, string>? RecordedDatas { get; set; }
+        static readonly List<string> Extensions = new List<string>() { "JPG", "JPEG", "PNG", "GIF", "SVG" };
 
         static void Main(string[] args)
         {
             try
             {
-                int i = 1;
-
-                Console.WriteLine($"建立輸出結果資料夾");
+                Console.WriteLine($"讀取輸出結果資料夾");
                 if (Directory.Exists(ResultPath))
                 {
-                    var results = Directory.GetFiles(ResultPath).ToList();
-                    results = results.Select(i => Path.GetFileNameWithoutExtension(i)).ToList();
-
-                    var result = results.Max((it) =>
-                    {
-                        int i = 0;
-                        int.TryParse(it, out i);
-                        return i;
-                    });
-
-                    i = result + 1;
-
-                    if (File.Exists(RecordedPath))
-                    {
-                        string jsonString = File.ReadAllText(RecordedPath);
-                        if (jsonString != null)
-                        {
-                            RecordedDatas = JsonSerializer.Deserialize<Dictionary<string, string>>(jsonString);
-                        }
-                    }
-
+                    
                 }
                 else
                 {
                     Directory.CreateDirectory(ResultPath);
                 }
 
-                if (RecordedDatas == null) RecordedDatas = new Dictionary<string, string>();
+                GetRecordedData();
 
                 if (Directory.Exists(ExeInDirectory))
                 {
@@ -67,23 +43,15 @@ namespace ReNameTool
 
                                     FileInfo fileInfo = new FileInfo(filePath);
 
-                                    if (fileInfo != null && fileInfo.DirectoryName != null)
+                                    if (fileInfo != null)
                                     {
                                         string hashString = GetHashString(sha1, filePath);
 
-                                        if (RecordedDatas.ContainsKey(fileInfo.Name))
-                                        {
-                                            var hashStringRecorded = RecordedDatas[fileInfo.Name];
+                                        if (CheckRecordedData(hashString)) break;
 
-                                            if (hashStringRecorded == hashString)
-                                            {
-                                                break;
-                                            }
-                                        }
+                                        fileInfo.CopyTo(Path.Combine(ResultPath, $"{(RecordedData.MaxFileNunber++).ToString().PadLeft(4, '0')}{fileInfo.Extension}"));
 
-                                        fileInfo.CopyTo(Path.Combine(ResultPath, $"{(i++).ToString().PadLeft(4, '0')}{fileInfo.Extension}"));
-
-                                        RecordedDatas.Add(fileInfo.Name, hashString);
+                                        AddRecordedData(hashString);
                                     }
 
                                     break;
@@ -94,8 +62,7 @@ namespace ReNameTool
                         }
                     }
 
-                    string json = JsonSerializer.Serialize(RecordedDatas);
-                    File.WriteAllText(RecordedPath, json);
+                    SetRecordedData();
 
                 }
                 else
@@ -117,6 +84,58 @@ namespace ReNameTool
             string hashString = BitConverter.ToString(hashBytes).Replace("-", "");
 
             return hashString;
+        }
+
+
+        static readonly string RecordedPath = Path.Combine(ResultPath, "ReNameRecordedData");
+        static RecordedDataModel RecordedData { get; set; }
+
+        [Serializable]
+        class RecordedDataModel
+        {
+            public int MaxFileNunber {  get; set; }
+            public HashSet<string>? HashData { get; set; }
+        }
+
+        private static void GetRecordedData()
+        {
+            if (File.Exists(RecordedPath))
+            {
+                string jsonString = File.ReadAllText(RecordedPath);
+                if (jsonString != null)
+                {
+                    RecordedData = JsonSerializer.Deserialize<RecordedDataModel>(jsonString);
+                }
+            }
+            else
+            {
+                if (RecordedData == null)
+                {
+                    RecordedData = new RecordedDataModel()
+                    {
+                        MaxFileNunber = 1,
+                        HashData = new HashSet<string>()
+                    };
+                }
+            }
+        }
+
+        private static void SetRecordedData()
+        {
+            string json = JsonSerializer.Serialize(RecordedData);
+            File.WriteAllText(RecordedPath, json);
+        }
+
+        private static void AddRecordedData(string data)
+        {
+            if (RecordedData == null) GetRecordedData();
+            RecordedData.HashData.Add(data);
+        }
+
+        private static bool CheckRecordedData(string data)
+        {
+            if (RecordedData == null) GetRecordedData();
+            return RecordedData.HashData.Contains(data);
         }
     }
 }
